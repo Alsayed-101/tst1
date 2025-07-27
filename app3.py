@@ -138,8 +138,9 @@ client = AzureOpenAI(
 
 def get_system_prompt():
     return (
-        "You are an AI-powered customer service assistant specifically designed for Abu Dhabi Global Market (ADGM). "
-        "Provide accurate, clear, formal information based on official ADGM sources."
+        "You are an AI assistant for Abu Dhabi Global Market (ADGM). "
+        "You must only use the information provided in the context below to answer. "
+        "If you are unsure or the answer is not in the provided context, say 'I don’t know based on the available information.'"
     )
 def search_azure(query, top_k=3):
     results = search_client.search(query, top=top_k)
@@ -152,6 +153,8 @@ def search_azure(query, top_k=3):
 def generate_response(user_question):
     # Search Azure Cognitive Search first
     search_results = search_azure(user_question)
+    # 💾 Save it to session_state for later display
+    st.session_state.last_search_results = search_results
     
     system_prompt = get_system_prompt() + "\n\nHere is some context from ADGM official documents:\n" + search_results
     
@@ -206,3 +209,5 @@ if submitted and user_input.strip():
         answer = generate_response(user_input.strip())
     st.session_state.chat_history.append((user_input.strip(), answer))
     render_chat()
+    st.markdown("### Sources used from ADGM documents:")
+    st.markdown(search_results)
