@@ -206,8 +206,16 @@ with st.form("chat_form", clear_on_submit=True):
 
 if submitted and user_input.strip():
     with st.spinner("Thinking..."):
-        answer = generate_response(user_input.strip())
-    st.session_state.chat_history.append((user_input.strip(), answer))
+        # Generate response and get search context
+        user_question = user_input.strip()
+        search_context = search_azure(user_question)  # Get snippets
+        answer = generate_response(user_question)
+    
+    # Save chat
+    st.session_state.chat_history.append((user_question, answer))
     render_chat()
+    
+    # Show ADGM sources
     st.markdown("### Sources used from ADGM documents:")
-    st.markdown(search_results)
+    st.markdown(f"```\n{search_context}\n```")
+
