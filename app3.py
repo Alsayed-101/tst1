@@ -1,5 +1,17 @@
 import streamlit as st
 from openai import AzureOpenAI
+from azure.search.documents import SearchClient
+from azure.core.credentials import AzureKeyCredential
+
+search_endpoint = st.secrets["search_endpoint"]
+search_key = st.secrets["search_key"]
+search_index = st.secrets["search_index"]
+
+search_client = SearchClient(
+    endpoint=search_endpoint,
+    index_name=search_index,
+    credential=AzureKeyCredential(search_key)
+)
 
 # --- CONFIG ---
 subscription_key = st.secrets["subscription_key"]
@@ -7,126 +19,190 @@ azure_endpoint = st.secrets["azure_endpoint"]
 api_version = st.secrets["api_version"]
 deployment = st.secrets["deployment"]
 
-# --- PAGE SETTINGS ---
 st.set_page_config(page_title="ADGM Chatbot", layout="centered")
 
-# --- CSS STYLING ---
+# --- CSS ---
 st.markdown("""
-    <style>
-        .chat-container {
-            max-width: 700px;
-            margin: 0 auto;
-        }
-        .user-msg {
-            background-color: #d0e7ff;
-            padding: 12px;
-            border-radius: 10px;
-            margin-bottom: 8px;
-            text-align: right;
-        }
-        .bot-msg {
-            background-color: #f0f0f0;
-            padding: 12px;
-            border-radius: 10px;
-            margin-bottom: 15px;
-            text-align: left;
-        }
-    </style>
+<style>
+    /* Container with light grey background */
+    .chat-container {
+        max-width: 720px;
+        height: 480px;
+        margin: 30px auto;
+        padding: 24px 28px;
+        border-radius: 12px;
+        background: #f5f5f7; /* Light grey */
+        box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+        overflow-y: auto;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        scroll-behavior: smooth;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Welcome text in chat container */
+    .welcome-text {
+        font-weight: 700;
+        font-size: 1.6rem;
+        color: #444;
+        margin: auto;
+        text-align: center;
+        user-select: none;
+    }
+
+    /* User message bubble */
+    .user-msg {
+        background-color: #16A9E9;
+        color: #ffffff;
+        padding: 14px 20px;
+        border-radius: 24px 24px 0 24px;
+        max-width: 70%;
+        margin-left: auto;
+        margin-bottom: 16px;
+        font-size: 1.05rem;
+        line-height: 1.5;
+        word-wrap: break-word;
+        box-shadow: 0 4px 12px rgba(22, 169, 233, 0.4);
+    }
+
+    /* Bot message bubble */
+    .bot-msg {
+        background-color: #f1f3f5;
+        color: #111827;
+        padding: 14px 20px;
+        border-radius: 24px 24px 24px 0;
+        max-width: 70%;
+        margin-right: auto;
+        margin-bottom: 16px;
+        font-size: 1.05rem;
+        line-height: 1.5;
+        word-wrap: break-word;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    /* Logo */
+    .logo {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        width: 130px;
+        margin-top: 12px;
+        margin-bottom: 12px;
+    }
+
+    /* Input area */
+    .input-area {
+        max-width: 720px;
+        margin: 20px auto 40px auto;
+        display: flex;
+        gap: 12px;
+        padding: 0 8px;
+    }
+    .input-area input[type="text"] {
+        flex-grow: 1;
+        padding: 14px 20px;
+        font-size: 1.1rem;
+        border-radius: 28px;
+        border: 1.5px solid #ccc;
+        outline: none;
+        transition: border-color 0.3s ease;
+    }
+    .input-area input[type="text"]:focus {
+        border-color: #16A9E9;
+        box-shadow: 0 0 6px rgba(22,169,233,0.5);
+    }
+    .input-area button {
+        background-color: #16A9E9;
+        border: none;
+        color: white;
+        padding: 14px 28px;
+        font-size: 1.1rem;
+        border-radius: 28px;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+        box-shadow: 0 4px 12px rgba(22,169,233,0.35);
+    }
+    .input-area button:hover {
+        background-color: #0f7abf;
+        box-shadow: 0 6px 16px rgba(15,122,191,0.6);
+    }
+</style>
 """, unsafe_allow_html=True)
 
-# --- LOGO ---
-st.markdown('<div style="text-align: center;">', unsafe_allow_html=True)
-st.image("company_logo.png", use_container_width=True)
-st.markdown('</div>', unsafe_allow_html=True)
-
-# --- HEADER ---
-st.title("Welcome to ADGM Chatbot")
-
-# --- SESSION STATE ---
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-if "last_input" not in st.session_state:
-    st.session_state.last_input = ""
-
-# --- INIT OPENAI CLIENT ---
+# --- OPENAI CLIENT ---
 client = AzureOpenAI(
     api_key=subscription_key,
     azure_endpoint=azure_endpoint,
     api_version=api_version,
 )
 
-# --- SYSTEM PROMPT ---
 def get_system_prompt():
     return (
         "You are an AI-powered customer service assistant specifically designed for Abu Dhabi Global Market (ADGM). "
-        "Your role is to provide accurate, clear, and formal information to ADGM customers and visitors based solely on the official ADGM website content provided below.\n\n"
-
-        "Instructions:\n"
-        "- Maintain a formal, respectful, and professional tone.\n\n"
-        "You may also respond to questions specifically related to Abu Dhabi Finance Week (ADFW), as it falls under the scope of ADGM-related topics you can use external sources."
-
-        "Responsibilities:\n"
-        "- Use **only** content retrieved from the official ADGM website. Do not use external sources or personal knowledge, even if you are confident in the answer.\n"
-        "- Always quote or reference information from the ADGM website where relevant.\n"
-        "- If the requested information is not available or you are unsure of the answer, respond:\n"
-        "  \"Thank you for your question. Based on the information available to me, I am unable to provide a definitive answer. I kindly recommend contacting ADGM directly at +971 2 333 8888 or via email at contact@adgm.com for further assistance.\"\n"
-        "- If the user's query is not related to ADGM's scope, respond:\n"
-        "  \"I appreciate your inquiry. However, this matter appears to be outside the scope of Abu Dhabi Global Market. For the most effective support, I encourage you to contact the appropriate organization. I am here to assist with ADGM-specific matters only.\"\n"
-        "- If the conversation becomes off-topic, respond:\n"
-        "  \"Let’s kindly keep the discussion focused on ADGM-related topics so I can provide you with the most relevant and accurate information. Thank you for your understanding.\"\n\n"
-
-        "Official ADGM Website: https://www.adgm.com\n"
-        "Information from ADGM website: {retrieved_text}\n"
-        "User’s question: {user_question}\n"
-        "Your detailed answer:"
+        "Provide accurate, clear, formal information based on official ADGM sources."
     )
+def search_azure(query, top_k=3):
+    results = search_client.search(query, top=top_k)
+    snippets = []
+    for result in results:
+        # Change 'content' to your indexed text field name
+        snippets.append(result.get('content', ''))
+    return "\n\n".join(snippets)
 
-# --- FUNCTION TO GENERATE RESPONSE ---
 def generate_response(user_question):
-    messages = [{"role": "system", "content": get_system_prompt()}]
-
+    # Search Azure Cognitive Search first
+    search_results = search_azure(user_question)
+    
+    system_prompt = get_system_prompt() + "\n\nHere is some context from ADGM official documents:\n" + search_results
+    
+    messages = [{"role": "system", "content": system_prompt}]
     for user, bot in st.session_state.chat_history:
         messages.append({"role": "user", "content": user})
         messages.append({"role": "assistant", "content": bot})
-
     messages.append({"role": "user", "content": user_question})
-
+    
     response = client.chat.completions.create(
         model=deployment,
         messages=messages,
-        max_completion_tokens=800,
+        max_tokens=800,
         temperature=0.3,
-        top_p=1.0,
-        frequency_penalty=0.0,
-        presence_penalty=0.0,
     )
+    return response.choices[0].message.content.strip()
 
-    reply = response.choices[0].message.content.strip()
-    return reply
 
-# --- CHAT UI ---
-st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
-# Display history
-for user, bot in st.session_state.chat_history:
-    st.markdown(f'<div class="user-msg">{user}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="bot-msg">{bot}</div>', unsafe_allow_html=True)
+# Logo at top outside container (optional)
+st.image("company_logo.png", width=200)
 
-# --- INPUT AREA ---
-with st.form(key="chat_form"):
-    user_input = st.text_input("Ask your question:", value="", key="user_input")
-    submitted = st.form_submit_button("Send")
+# Chat container placeholder
+chat_placeholder = st.empty()
+
+def render_chat():
+    chat_html = '<div class="chat-container">'
+    if not st.session_state.chat_history:
+        # Show welcome text before first message
+        chat_html += '<div class="welcome-text">Welcome to ADGM’s Virtual Assistant</div>'
+    else:
+        # Show chat messages
+        for user_msg, bot_msg in st.session_state.chat_history:
+            chat_html += f'<div class="user-msg">{user_msg}</div>'
+            chat_html += f'<div class="bot-msg">{bot_msg}</div>'
+    chat_html += '</div>'
+    chat_placeholder.markdown(chat_html, unsafe_allow_html=True)
+
+render_chat()
+
+with st.form("chat_form", clear_on_submit=True):
+    col1, col2 = st.columns([8,1])
+    with col1:
+        user_input = st.text_input("", placeholder="Ask your question here...", key="input_text")
+    with col2:
+        submitted = st.form_submit_button("Send")
 
 if submitted and user_input.strip():
     with st.spinner("Thinking..."):
         answer = generate_response(user_input.strip())
     st.session_state.chat_history.append((user_input.strip(), answer))
-    st.session_state.last_input = user_input.strip()
-
-# --- REDISPLAY LAST RESPONSE IF JUST ADDED ---
-if st.session_state.last_input:
-    last = st.session_state.chat_history[-1]
-    if last[0] == st.session_state.last_input:
-        st.markdown(f'<div class="user-msg">{last[0]}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="bot-msg">{last[1]}</div>', unsafe_allow_html=True)
-    st.session_state.last_input = ""  # Reset
+    render_chat()
