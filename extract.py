@@ -41,7 +41,7 @@ def chunk_text(text, max_tokens=500):
 # Set Azure OpenAI credentials from Streamlit secrets
 openai.api_type = "azure"
 openai.api_base = st.secrets["azure_endpoint1"] # Base URL only, no path
-openai.api_version = st.secrets["api_version1"]
+openai.api_version = st.secrets["api_version1"] 
 openai.api_key = st.secrets["subscription_key1"]
 
 # Embedding deployment/model name (make sure this matches your Azure deployment name)

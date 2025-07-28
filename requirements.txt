@@ -54,3 +54,4 @@ azure-search-documents
 azure-core
 requests
 beautifulsoup4
+sentence-transformers

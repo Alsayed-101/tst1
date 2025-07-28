@@ -1,12 +1,15 @@
 import streamlit as st
+import json
+import numpy as np
+import os
 from openai import AzureOpenAI
-
 
 # --- CONFIG ---
 subscription_key = st.secrets["subscription_key"]
 azure_endpoint = st.secrets["azure_endpoint"]
 api_version = st.secrets["api_version"]
 deployment = st.secrets["deployment"]
+embedding_deployment = "text-embedding-3-large"  # Embedding deployment name
 
 st.set_page_config(page_title="ADGM Chatbot", layout="centered")
 
@@ -118,25 +121,60 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- OPENAI CLIENT ---
+# --- LOAD VECTOR STORE ---
+@st.cache_data(show_spinner=True)
+def load_vectors():
+    with open("adgm_vectors.json", "r") as f:
+        return json.load(f)
+
+vector_data = load_vectors()
+
+# --- OPENAI CLIENT SETUP ---
 client = AzureOpenAI(
     api_key=subscription_key,
-    azure_endpoint=azure_endpoint,
     api_version=api_version,
+    azure_endpoint=azure_endpoint
 )
 
-def get_system_prompt():
-    return (
-        "You are an AI-powered customer service assistant specifically designed for Abu Dhabi Global Market (ADGM). "
-        "Provide accurate, clear, formal information based on official ADGM sources."
+# --- UTILS ---
+def cosine_similarity(a, b):
+    a = np.array(a)
+    b = np.array(b)
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+def get_embedding(text):
+    response = client.embeddings.create(
+        model=embedding_deployment,
+        input=text
     )
+    return response.data[0].embedding
+
+
+def find_similar_chunks(query, k=3):
+    query_emb = get_embedding(query)
+    similarities = []
+    for item in vector_data:
+        sim = cosine_similarity(query_emb, item["embedding"])
+        similarities.append((sim, item["text"]))
+    similarities.sort(key=lambda x: x[0], reverse=True)
+    return [text for _, text in similarities[:k]]
 
 def generate_response(user_question):
-    messages = [{"role": "system", "content": get_system_prompt()}]
+    context_chunks = find_similar_chunks(user_question, k=3)
+    context = "\n\n---\n\n".join(context_chunks)
+
+    system_prompt = (
+        "You are an AI-powered customer service assistant specifically designed for Abu Dhabi Global Market (ADGM). "
+        "Use the following context from official ADGM sources to answer the question accurately, clearly, and formally.\n\n"
+        f"Context:\n{context}"
+    )
+
+    messages = [{"role": "system", "content": system_prompt}]
     for user, bot in st.session_state.chat_history:
         messages.append({"role": "user", "content": user})
         messages.append({"role": "assistant", "content": bot})
     messages.append({"role": "user", "content": user_question})
+
     response = client.chat.completions.create(
         model=deployment,
         messages=messages,
@@ -145,22 +183,21 @@ def generate_response(user_question):
     )
     return response.choices[0].message.content.strip()
 
+
+# --- APP STATE ---
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Logo at top outside container (optional)
+# --- UI ---
 st.image("company_logo.png", width=200)
 
-# Chat container placeholder
 chat_placeholder = st.empty()
 
 def render_chat():
     chat_html = '<div class="chat-container">'
     if not st.session_state.chat_history:
-        # Show welcome text before first message
         chat_html += '<div class="welcome-text">Welcome to ADGM’s Virtual Assistant</div>'
     else:
-        # Show chat messages
         for user_msg, bot_msg in st.session_state.chat_history:
             chat_html += f'<div class="user-msg">{user_msg}</div>'
             chat_html += f'<div class="bot-msg">{bot_msg}</div>'
