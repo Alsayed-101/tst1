@@ -1,17 +1,6 @@
 import streamlit as st
 from openai import AzureOpenAI
-from azure.search.documents import SearchClient
-from azure.core.credentials import AzureKeyCredential
 
-search_endpoint = st.secrets["search_endpoint"]
-search_key = st.secrets["search_key"]
-search_index = st.secrets["search_index"]
-
-search_client = SearchClient(
-    endpoint=search_endpoint,
-    index_name=search_index,
-    credential=AzureKeyCredential(search_key)
-)
 
 # --- CONFIG ---
 subscription_key = st.secrets["subscription_key"]
@@ -138,32 +127,16 @@ client = AzureOpenAI(
 
 def get_system_prompt():
     return (
-        "You are an AI assistant for Abu Dhabi Global Market (ADGM). "
-        "You must only use the information provided in the context below to answer. "
-        "If you are unsure or the answer is not in the provided context, say 'I don’t know based on the available information.'"
+        "You are an AI-powered customer service assistant specifically designed for Abu Dhabi Global Market (ADGM). "
+        "Provide accurate, clear, formal information based on official ADGM sources."
     )
-def search_azure(query, top_k=3):
-    results = search_client.search(query, top=top_k)
-    snippets = []
-    for result in results:
-        # Change 'content' to your indexed text field name
-        snippets.append(result.get('content', ''))
-    return "\n\n".join(snippets)
 
 def generate_response(user_question):
-    # Search Azure Cognitive Search first
-    search_results = search_azure(user_question)
-    # 💾 Save it to session_state for later display
-    st.session_state.last_search_results = search_results
-    
-    system_prompt = get_system_prompt() + "\n\nHere is some context from ADGM official documents:\n" + search_results
-    
-    messages = [{"role": "system", "content": system_prompt}]
+    messages = [{"role": "system", "content": get_system_prompt()}]
     for user, bot in st.session_state.chat_history:
         messages.append({"role": "user", "content": user})
         messages.append({"role": "assistant", "content": bot})
     messages.append({"role": "user", "content": user_question})
-    
     response = client.chat.completions.create(
         model=deployment,
         messages=messages,
@@ -171,7 +144,6 @@ def generate_response(user_question):
         temperature=0.3,
     )
     return response.choices[0].message.content.strip()
-
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
@@ -206,16 +178,6 @@ with st.form("chat_form", clear_on_submit=True):
 
 if submitted and user_input.strip():
     with st.spinner("Thinking..."):
-        # Generate response and get search context
-        user_question = user_input.strip()
-        search_context = search_azure(user_question)  # Get snippets
-        answer = generate_response(user_question)
-    
-    # Save chat
-    st.session_state.chat_history.append((user_question, answer))
+        answer = generate_response(user_input.strip())
+    st.session_state.chat_history.append((user_input.strip(), answer))
     render_chat()
-    
-    # Show ADGM sources
-    st.markdown("### Sources used from ADGM documents:")
-    st.markdown(f"```\n{search_context}\n```")
-
