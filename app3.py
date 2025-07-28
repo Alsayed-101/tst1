@@ -1,9 +1,24 @@
 import streamlit as st
 import json
 import numpy as np
+import requests
 import os
 from openai import AzureOpenAI
 
+def download_vectors():
+    filename = "adgm_vectors.json"
+    if not os.path.exists(filename):
+        url = "https://drive.google.com/uc?export=download&id=1WbL0fCfochPlRGZy0kV4UNMcoW367NH_"
+        print(f"Downloading {filename}...")
+        response = requests.get(url)
+        response.raise_for_status()  # ensure it downloaded correctly
+        with open(filename, "wb") as f:
+            f.write(response.content)
+        print("Download complete!")
+    else:
+        print(f"{filename} already exists locally.")
+
+download_vectors()
 # --- CONFIG ---
 subscription_key = st.secrets["subscription_key"]
 azure_endpoint = st.secrets["azure_endpoint"]
