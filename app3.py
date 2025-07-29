@@ -4,16 +4,14 @@ import numpy as np
 import requests
 import os
 from openai import AzureOpenAI
+import gdown
 
 def download_vectors():
     filename = "adgm_vectors.json"
     if not os.path.exists(filename):
-        url = "https://drive.google.com/uc?export=download&id=1WbL0fCfochPlRGZy0kV4UNMcoW367NH_"
+        url = "https://drive.google.com/uc?id=1WbL0fCfochPlRGZy0kV4UNMcoW367NH_"
         print(f"Downloading {filename}...")
-        response = requests.get(url)
-        response.raise_for_status()  # ensure it downloaded correctly
-        with open(filename, "wb") as f:
-            f.write(response.content)
+        gdown.download(url, filename, quiet=False)
         print("Download complete!")
     else:
         print(f"{filename} already exists locally.")
