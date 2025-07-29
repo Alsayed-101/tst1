@@ -5,6 +5,7 @@ import requests
 import os
 from openai import AzureOpenAI
 import gdown
+import base64
 
 def download_vectors():
     filename = "adgm_vectors.json"
@@ -26,113 +27,141 @@ embedding_deployment = "text-embedding-3-large"  # Embedding deployment name
 
 st.set_page_config(page_title="ADGM Chatbot", layout="centered")
 
+def get_base64_of_bin_file(bin_file):
+    with open(bin_file, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+bg_image = get_base64_of_bin_file("bg.png")
 # --- CSS ---
-st.markdown("""
-<style>
-    /* Container with light grey background */
-    .chat-container {
+# --- CSS ---
+st.markdown(
+    f"""
+    <style>
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stVerticalBlock"] {{
+        background: url("data:image/png;base64,{bg_image}") no-repeat center center fixed;
+        background-size: cover;
+        height: 100vh !important;
+        overflow: hidden !important;
+        margin: 0;
+        padding: 0;
+    }}
+
+    .chat-container {{
         max-width: 720px;
-        height: 480px;
-        margin: 30px auto;
-        padding: 24px 28px;
-        border-radius: 12px;
-        background: #f5f5f7; /* Light grey */
+        height: calc(75vh - 100px);
+        margin: 0 auto;
+        padding: 20px 20px 0 20px;
+        border-radius: 12px 12px 0 0;
+        background: rgba(255, 255, 255, 0.95);
         box-shadow: 0 8px 24px rgba(0,0,0,0.1);
         overflow-y: auto;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         scroll-behavior: smooth;
         display: flex;
         flex-direction: column;
-    }
+    }}
 
-    /* Welcome text in chat container */
-    .welcome-text {
+    .welcome-text {{
         font-weight: 700;
         font-size: 1.6rem;
         color: #444;
         margin: auto;
         text-align: center;
         user-select: none;
-    }
+    }}
 
-    /* User message bubble */
-    .user-msg {
-        background-color: #16A9E9;
+    .user-msg {{
+        background-color: #098AFF;
         color: #ffffff;
         padding: 14px 20px;
         border-radius: 24px 24px 0 24px;
         max-width: 70%;
         margin-left: auto;
-        margin-bottom: 16px;
+        margin-bottom: 8px;
         font-size: 1.05rem;
         line-height: 1.5;
         word-wrap: break-word;
-        box-shadow: 0 4px 12px rgba(22, 169, 233, 0.4);
-    }
+        box-shadow: 0 4px 12px rgba(9, 138, 255, 0.4);
+    }}
 
-    /* Bot message bubble */
-    .bot-msg {
+    .bot-msg {{
         background-color: #f1f3f5;
         color: #111827;
-        padding: 14px 20px;
-        border-radius: 24px 24px 24px 0;
-        max-width: 70%;
-        margin-right: auto;
-        margin-bottom: 16px;
-        font-size: 1.05rem;
-        line-height: 1.5;
+        padding: 18px 24px;
+        border-radius: 24px;
+        width: 100%;
+        margin-bottom: 8px;
+        font-size: 1.1rem;
+        line-height: 1.6;
         word-wrap: break-word;
         box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    }
+    }}
 
-    /* Logo */
-    .logo {
-        display: block;
-        margin-left: auto;
-        margin-right: auto;
-        width: 130px;
-        margin-top: 12px;
-        margin-bottom: 12px;
-    }
-
-    /* Input area */
-    .input-area {
+    .input-area {{
+        background-color: white;
         max-width: 720px;
-        margin: 20px auto 40px auto;
+        padding: 12px 20px;
+        margin: 0 auto;
+        border-radius: 0 0 12px 12px;
         display: flex;
-        gap: 12px;
-        padding: 0 8px;
-    }
-    .input-area input[type="text"] {
-        flex-grow: 1;
-        padding: 14px 20px;
-        font-size: 1.1rem;
-        border-radius: 28px;
-        border: 1.5px solid #ccc;
-        outline: none;
-        transition: border-color 0.3s ease;
-    }
-    .input-area input[type="text"]:focus {
-        border-color: #16A9E9;
-        box-shadow: 0 0 6px rgba(22,169,233,0.5);
-    }
-    .input-area button {
-        background-color: #16A9E9;
-        border: none;
-        color: white;
-        padding: 14px 28px;
-        font-size: 1.1rem;
-        border-radius: 28px;
-        cursor: pointer;
-        transition: background-color 0.3s ease;
-        box-shadow: 0 4px 12px rgba(22,169,233,0.35);
-    }
-    .input-area button:hover {
-        background-color: #0f7abf;
-        box-shadow: 0 6px 16px rgba(15,122,191,0.6);
-    }
-</style>
-""", unsafe_allow_html=True)
+        gap: 8px;
+        align-items: center;
+        box-shadow: none !important;
+        border: none !important;
+    }}
+
+    /* Fix border for actual text input */
+    .stTextInput > div > input {{
+        height: 36px !important; 
+        border-radius: 20px !important;
+        padding: 0 14px !important;
+        font-size: 1rem !important;
+        width: 100% !important;
+        margin: 0 !important;
+    }}
+
+    /* Remove button border and shadow */
+    .stButton button {{
+        height: 36px !important;
+        padding: 6px 20px !important;
+        font-size: 1rem !important;
+        border-radius: 20px !important;
+        background-color: #098AFF !important;
+        color: #098AFF  !important;
+        border: none !important;
+        box-shadow: none !important;
+        display: inline-block !important;
+        margin-top: 4px;
+    }}
+
+    .stButton button:hover {{
+        background-color: #066FD6 !important;
+    }}
+
+    .stForm > div {{
+        background-color: white;
+        max-width: 720px;
+        padding: 8px 16px;
+        margin: 0 auto;
+        border-radius: 0 0 12px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        align-items: center;
+        text-align: center;   /* c
+        box-shadow: none !important;
+        border: none !important;
+    }}
+
+    .css-1cpxqw2, .stSpinner > div > div {{
+        color: white !important;
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 
 # --- LOAD VECTOR STORE ---
 @st.cache_data(show_spinner=True)
@@ -179,6 +208,10 @@ def generate_response(user_question):
     system_prompt = (
         "You are an AI-powered customer service assistant specifically designed for Abu Dhabi Global Market (ADGM). "
         "Use the following context from official ADGM sources to answer the question accurately, clearly, and formally.\n\n"
+        "if asked about adgm academy anwser questions and direct users form and to this link https://www.adgmacademy.com"
+        "if you dont know the anwser to an adgm specific question give users this number to contact adgm support team +971 2 333 8888 and this email info@adgm.com  "
+        "ONLY if asked about Jurisdiction include al reem island not only al maryah include info from this :  Al Reem Island is now part of ADGM’s expanded business district and ADGM is working with the Reem Island business community to support the transition to an ADGM licence.ADGM is assisting existing Al Reem businesses with their transition to an ADGM licence ahead of the deadline, by exempting qualifying businesses from paying any commercial licence fees if they transition by the 31st October 2024. To continue to operate on Al Reem, businesses must transition to an ADGM licence to continue their operations after the transition period ends on the 31st December 2024. for more info visit this website  "
+        "if anwser is long and in a paragraph make key information in bold , try using lists and bullets for longer anwsers"
         f"Context:\n{context}"
     )
 
@@ -202,8 +235,6 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 # --- UI ---
-st.image("company_logo.png", width=200)
-
 chat_placeholder = st.empty()
 
 def render_chat():
@@ -220,11 +251,8 @@ def render_chat():
 render_chat()
 
 with st.form("chat_form", clear_on_submit=True):
-    col1, col2 = st.columns([8,1])
-    with col1:
-        user_input = st.text_input("", placeholder="Ask your question here...", key="input_text")
-    with col2:
-        submitted = st.form_submit_button("Send")
+    user_input = st.text_input("", placeholder="Ask your question here...", key="input_text")
+    submitted = st.form_submit_button("Send")
 
 if submitted and user_input.strip():
     with st.spinner("Thinking..."):
